@@ -132,8 +132,8 @@ export async function analyzeDeal(target, acquirer, apiKey) {
     }
   }
 
-  const [profile, metrics, ratios, peerSymbols] = await Promise.all([
-    getProfile(targetSymbol, apiKey),
+  const profile = await getProfile(targetSymbol, apiKey)
+  const [metrics, ratios, peers] = await Promise.all([
     getKeyMetrics(targetSymbol, apiKey),
     getRatios(targetSymbol, apiKey),
     getPeers(targetSymbol, apiKey),
@@ -142,26 +142,22 @@ export async function analyzeDeal(target, acquirer, apiKey) {
   const evEbitda = metrics?.evToEBITDATTM
   const pe = ratios?.priceToEarningsRatioTTM
 
-  const peersToFetch = peerSymbols.slice(0, 3)
-  const peerData = await Promise.all(
-    peersToFetch.map(async (sym) => {
-      try {
-        const [pProfile, pRatios, pMetrics] = await Promise.all([
-          getProfile(sym, apiKey),
-          getRatios(sym, apiKey),
-          getKeyMetrics(sym, apiKey),
-        ])
-        return {
-          name: pProfile.companyName || sym,
-          symbol: sym,
-          ev_ebitda: pMetrics?.evToEBITDATTM || 0,
-          pe: pRatios?.priceToEarningsRatioTTM || 0,
-        }
-      } catch {
-        return { name: sym, symbol: sym, ev_ebitda: 0, pe: 0 }
-      }
-    })
-  )
+  const peerData = []
+  for (const peer of peers) {
+    const sym = peer.symbol
+    try {
+      const pMetrics = await getKeyMetrics(sym, apiKey)
+      const pRatios = await getRatios(sym, apiKey)
+      peerData.push({
+        name: peer.companyName || sym,
+        symbol: sym,
+        ev_ebitda: pMetrics?.evToEBITDATTM || 0,
+        pe: pRatios?.priceToEarningsRatioTTM || 0,
+      })
+    } catch {
+      peerData.push({ name: peer.companyName || sym, symbol: sym, ev_ebitda: 0, pe: 0 })
+    }
+  }
 
   const validPeerEvEbitda = peerData.filter(p => p.ev_ebitda > 0).map(p => p.ev_ebitda)
   const peerAvgEvEbitda = validPeerEvEbitda.length
