@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { analyzeDeal } from './analyze.js'
 import DealHeader from './components/DealHeader.jsx'
 import MetricCards from './components/MetricCards.jsx'
@@ -6,6 +6,8 @@ import CompsChart from './components/CompsChart.jsx'
 import BulletSection from './components/BulletSection.jsx'
 import Scorecard from './components/Scorecard.jsx'
 import VerdictBadge from './components/VerdictBadge.jsx'
+
+const FMP_KEY_STORAGE = 'fmp_api_key'
 
 function SearchIcon() {
   return (
@@ -24,26 +26,130 @@ function SpinnerIcon() {
   )
 }
 
+function KeyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 010-7.778zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+    </svg>
+  )
+}
+
+function ApiKeySetup({ apiKey, setApiKey, onSave }) {
+  const [input, setInput] = useState(apiKey)
+  const saved = !!apiKey
+
+  return (
+    <div style={{
+      background: saved ? 'rgba(34, 197, 94, 0.06)' : 'var(--navy-3)',
+      border: `1px solid ${saved ? 'rgba(34, 197, 94, 0.2)' : 'var(--border-strong)'}`,
+      borderRadius: 12,
+      padding: '16px 20px',
+      marginBottom: 24,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: saved ? 0 : 12 }}>
+        <KeyIcon />
+        <span style={{
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: saved ? 'var(--green)' : 'var(--white-50)',
+        }}>
+          {saved ? 'FMP API key connected' : 'Financial Modeling Prep API Key'}
+        </span>
+        {saved && (
+          <button
+            onClick={() => { localStorage.removeItem(FMP_KEY_STORAGE); setApiKey('') }}
+            style={{
+              marginLeft: 'auto',
+              fontSize: 11,
+              color: 'var(--white-20)',
+              padding: '2px 8px',
+              borderRadius: 4,
+              border: '1px solid var(--border)',
+            }}
+          >Change</button>
+        )}
+      </div>
+      {!saved && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--white-50)', marginBottom: 12, lineHeight: 1.5 }}>
+            Get a free key (no credit card) at{' '}
+            <a href="https://site.financialmodelingprep.com/developer/docs" target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+              financialmodelingprep.com
+            </a>
+            {' '}— 250 requests/day. Your key is stored locally in your browser only.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <input
+              className="input-field"
+              type="password"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Paste your FMP API key..."
+              style={{
+                flex: 1,
+                background: 'var(--navy-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 13,
+                color: 'var(--white)',
+                fontFamily: 'var(--mono)',
+              }}
+            />
+            <button
+              onClick={() => {
+                if (input.trim()) {
+                  localStorage.setItem(FMP_KEY_STORAGE, input.trim())
+                  setApiKey(input.trim())
+                  onSave()
+                }
+              }}
+              disabled={!input.trim()}
+              style={{
+                background: input.trim() ? 'var(--green)' : 'rgba(34,197,94,0.3)',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '10px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: input.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >Save</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [target, setTarget] = useState('')
   const [acquirer, setAcquirer] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(FMP_KEY_STORAGE) || '')
 
   async function handleAnalyze(e) {
     e.preventDefault()
-    if (!target.trim()) return
+    if (!target.trim() || !apiKey) return
 
     setLoading(true)
     setError(null)
     setResult(null)
 
     try {
-      const data = await analyzeDeal(target, acquirer)
+      const data = await analyzeDeal(target, acquirer, apiKey)
       setResult(data)
     } catch (err) {
-      setError(err.message || 'Analysis failed. Check your API key and try again.')
+      if (err.message?.includes('403') || err.message?.includes('401')) {
+        setError('Invalid API key. Check your FMP key and try again.')
+      } else {
+        setError(err.message || 'Analysis failed. Try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -129,11 +235,10 @@ export default function App() {
           }}>
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
-              background: 'var(--accent)',
-              boxShadow: '0 0 6px var(--accent)',
-              animation: 'pulse 2s infinite',
+              background: 'var(--green)',
+              boxShadow: '0 0 6px var(--green)',
             }}/>
-            Powered by Claude
+            Live Market Data
           </div>
           <h1 className="hero-title" style={{
             fontSize: 44,
@@ -143,19 +248,22 @@ export default function App() {
             color: 'var(--white)',
             marginBottom: 14,
           }}>
-            AI-Powered M&A<br />
-            <span style={{ color: 'var(--accent)' }}>Deal Analysis</span>
+            M&A Deal<br />
+            <span style={{ color: 'var(--accent)' }}>Analyzer</span>
           </h1>
           <p style={{
             fontSize: 16,
             color: 'var(--white-50)',
-            maxWidth: 480,
+            maxWidth: 520,
             margin: '0 auto',
             lineHeight: 1.6,
           }}>
-            Enter any public company to generate a full acquisition analysis — valuation, comps, synergies, risks, and deal verdict.
+            Enter any public company to generate a deal analysis with real valuation multiples, peer comps, and scoring — powered by live financial data.
           </p>
         </div>
+
+        {/* API Key Setup */}
+        <ApiKeySetup apiKey={apiKey} setApiKey={setApiKey} onSave={() => setError(null)} />
 
         {/* Search Form */}
         <form onSubmit={handleAnalyze} style={{ marginBottom: 48 }}>
@@ -164,6 +272,8 @@ export default function App() {
             border: '1px solid var(--border-strong)',
             borderRadius: 16,
             padding: '28px 32px',
+            opacity: apiKey ? 1 : 0.5,
+            pointerEvents: apiKey ? 'auto' : 'none',
           }}>
             <div className="form-row" style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
               <div style={{ flex: 2 }}>
@@ -181,7 +291,7 @@ export default function App() {
                   type="text"
                   value={target}
                   onChange={e => setTarget(e.target.value)}
-                  placeholder="e.g. Adobe Inc."
+                  placeholder="e.g. Adobe, AAPL, Datadog"
                   required
                   style={{
                     width: '100%',
@@ -191,7 +301,6 @@ export default function App() {
                     padding: '12px 16px',
                     fontSize: 15,
                     color: 'var(--white)',
-                    '::placeholder': { color: 'var(--white-20)' },
                   }}
                 />
               </div>
@@ -210,7 +319,7 @@ export default function App() {
                   type="text"
                   value={acquirer}
                   onChange={e => setAcquirer(e.target.value)}
-                  placeholder="e.g. Salesforce"
+                  placeholder="e.g. Salesforce, MSFT"
                   style={{
                     width: '100%',
                     background: 'var(--navy-2)',
@@ -226,9 +335,9 @@ export default function App() {
                 <button
                   className="analyze-btn"
                   type="submit"
-                  disabled={loading || !target.trim()}
+                  disabled={loading || !target.trim() || !apiKey}
                   style={{
-                    background: loading || !target.trim() ? 'rgba(59,130,246,0.4)' : 'var(--accent)',
+                    background: loading || !target.trim() || !apiKey ? 'rgba(59,130,246,0.4)' : 'var(--accent)',
                     color: 'var(--white)',
                     border: 'none',
                     borderRadius: 10,
@@ -240,7 +349,7 @@ export default function App() {
                     alignItems: 'center',
                     gap: 8,
                     whiteSpace: 'nowrap',
-                    cursor: loading || !target.trim() ? 'not-allowed' : 'pointer',
+                    cursor: loading || !target.trim() || !apiKey ? 'not-allowed' : 'pointer',
                     height: 48,
                   }}
                 >
@@ -258,7 +367,7 @@ export default function App() {
                 gap: 6,
               }}>
                 <SpinnerIcon />
-                Generating full M&A analysis — this takes ~10 seconds…
+                Fetching live market data and peer comparisons…
               </div>
             )}
           </div>
@@ -303,7 +412,9 @@ export default function App() {
         {!result && !loading && !error && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--white-20)' }}>
             <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.3 }}>⟳</div>
-            <div style={{ fontSize: 14 }}>Enter a company name above to generate your analysis</div>
+            <div style={{ fontSize: 14 }}>
+              {apiKey ? 'Enter a company name above to generate your analysis' : 'Add your FMP API key above to get started'}
+            </div>
           </div>
         )}
 
@@ -316,7 +427,7 @@ export default function App() {
         fontSize: 12,
         color: 'var(--white-20)',
       }}>
-        M&A Deal Analyzer · Built by John Gibson · Powered by Claude AI
+        M&A Deal Analyzer · Built by John Gibson · Data from Financial Modeling Prep
         <span style={{ marginLeft: 8, color: 'var(--red-dim)', fontSize: 11 }}>
           For informational purposes only. Not financial advice.
         </span>
