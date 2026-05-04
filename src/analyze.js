@@ -25,7 +25,7 @@ function generateHeadline(target, acquirer, sector, evEbitda, peerAvgEvEbitda) {
 
 function generateRationale(target, acquirer, sector, profile) {
   const acq = acquirer || 'The acquirer'
-  const mktCap = fmtBig(profile.mktCap)
+  const mktCap = fmtBig(profile.marketCap)
   return [
     `${acq} gains immediate scale in ${sector} by acquiring ${target}'s ${mktCap} market-cap platform and established customer base.`,
     `Combines complementary product portfolios — ${acq} fills capability gaps and strengthens competitive positioning against larger rivals.`,
@@ -77,17 +77,17 @@ function computeScorecard(evEbitda, pe, peerAvgEvEbitda, peerAvgPe, profile) {
     if (peRatio > 1.25) financialAttractiveness = clamp(financialAttractiveness - 10, 15, 90)
   }
 
-  if (profile.mktCap) {
-    if (profile.mktCap > 200e9) executionRisk = clamp(executionRisk + 15, 15, 90)
-    else if (profile.mktCap < 10e9) executionRisk = clamp(executionRisk - 10, 15, 90)
-    synergyPotential = profile.mktCap > 50e9 ? clamp(synergyPotential + 10, 15, 90) : synergyPotential
+  if (profile.marketCap) {
+    if (profile.marketCap > 200e9) executionRisk = clamp(executionRisk + 15, 15, 90)
+    else if (profile.marketCap < 10e9) executionRisk = clamp(executionRisk - 10, 15, 90)
+    synergyPotential = profile.marketCap > 50e9 ? clamp(synergyPotential + 10, 15, 90) : synergyPotential
   }
 
   const beta = profile.beta || 1
   if (beta < 0.9) marketTiming = clamp(marketTiming + 12, 15, 90)
   else if (beta > 1.3) marketTiming = clamp(marketTiming - 10, 15, 90)
 
-  const changesYTD = profile.changes || 0
+  const changesYTD = profile.change || 0
   if (changesYTD < -5) marketTiming = clamp(marketTiming + 10, 15, 90)
 
   return {
@@ -139,8 +139,8 @@ export async function analyzeDeal(target, acquirer, apiKey) {
     getPeers(targetSymbol, apiKey),
   ])
 
-  const evEbitda = metrics?.enterpriseValueOverEBITDATTM || ratios?.priceToEarningsRatioTTM
-  const pe = ratios?.peRatioTTM || profile.pe
+  const evEbitda = metrics?.evToEBITDATTM
+  const pe = ratios?.priceToEarningsRatioTTM
 
   const peersToFetch = peerSymbols.slice(0, 3)
   const peerData = await Promise.all(
@@ -154,8 +154,8 @@ export async function analyzeDeal(target, acquirer, apiKey) {
         return {
           name: pProfile.companyName || sym,
           symbol: sym,
-          ev_ebitda: pMetrics?.enterpriseValueOverEBITDATTM || 0,
-          pe: pRatios?.peRatioTTM || pProfile.pe || 0,
+          ev_ebitda: pMetrics?.evToEBITDATTM || 0,
+          pe: pRatios?.priceToEarningsRatioTTM || 0,
         }
       } catch {
         return { name: sym, symbol: sym, ev_ebitda: 0, pe: 0 }
@@ -177,8 +177,8 @@ export async function analyzeDeal(target, acquirer, apiKey) {
     ? Math.round((evEbitda / peerAvgEvEbitda - 1) * 100)
     : 25
 
-  const dealSize = profile.mktCap
-    ? fmtBig(profile.mktCap * (1 + Math.max(premium, 15) / 100))
+  const dealSize = profile.marketCap
+    ? fmtBig(profile.marketCap * (1 + Math.max(premium, 15) / 100))
     : 'N/A'
 
   const sector = profile.sector || 'N/A'
