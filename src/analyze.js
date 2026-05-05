@@ -133,11 +133,9 @@ export async function analyzeDeal(target, acquirer, apiKey) {
   }
 
   const profile = await getProfile(targetSymbol, apiKey)
-  const [metrics, ratios, peers] = await Promise.all([
-    getKeyMetrics(targetSymbol, apiKey),
-    getRatios(targetSymbol, apiKey),
-    getPeers(targetSymbol, apiKey),
-  ])
+  const metrics = await getKeyMetrics(targetSymbol, apiKey)
+  const ratios = await getRatios(targetSymbol, apiKey)
+  const peers = await getPeers(targetSymbol, apiKey)
 
   const evEbitda = metrics?.evToEBITDATTM
   const pe = ratios?.priceToEarningsRatioTTM
@@ -148,15 +146,20 @@ export async function analyzeDeal(target, acquirer, apiKey) {
     try {
       const pMetrics = await getKeyMetrics(sym, apiKey)
       const pRatios = await getRatios(sym, apiKey)
-      peerData.push({
-        name: peer.companyName || sym,
-        symbol: sym,
-        ev_ebitda: pMetrics?.evToEBITDATTM || 0,
-        pe: pRatios?.priceToEarningsRatioTTM || 0,
-      })
+      const pEvEbitda = pMetrics?.evToEBITDATTM || 0
+      const pPe = pRatios?.priceToEarningsRatioTTM || 0
+      if (pEvEbitda > 0 || pPe > 0) {
+        peerData.push({
+          name: peer.companyName || sym,
+          symbol: sym,
+          ev_ebitda: pEvEbitda,
+          pe: pPe,
+        })
+      }
     } catch {
-      peerData.push({ name: peer.companyName || sym, symbol: sym, ev_ebitda: 0, pe: 0 })
+      // skip peers with no data
     }
+    if (peerData.length >= 3) break
   }
 
   const validPeerEvEbitda = peerData.filter(p => p.ev_ebitda > 0).map(p => p.ev_ebitda)

@@ -99,5 +99,5 @@ export async function getRatios(symbol, apiKey) {
 export async function getPeers(symbol, apiKey) {
   const data = await fmpFetch(`/stock-peers?symbol=${symbol}`, apiKey)
   if (!data?.length) return []
-  return data.slice(0, 3)
+  return data.slice(0, 8)
 }
